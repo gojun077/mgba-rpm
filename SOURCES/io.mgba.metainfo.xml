@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.mgba.mGBA.desktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MPL-2.0</project_license>
+  <name>mGBA</name>
+  <summary>Game Boy Advance emulator</summary>
+  <description>
+    <p>mGBA is a fast and accurate emulator for Nintendo Game Boy Advance, Game Boy Color, and Game Boy titles.</p>
+    <p>It supports save states, rewinding, video capture, link cable emulation, scripting through Lua, and many debugging tools aimed at homebrew developers.</p>
+  </description>
+  <launchable type="desktop-id">io.mgba.mGBA.desktop</launchable>
+  <developer_name>Jeffrey Pfau</developer_name>
+  <provides>
+    <binary>mgba</binary>
+  </provides>
+  <categories>
+    <category>Game</category>
+    <category>Emulator</category>
+  </categories>
+  <keywords>
+    <keyword>gba</keyword>
+    <keyword>gameboy</keyword>
+    <keyword>emulator</keyword>
+    <keyword>game boy advance</keyword>
+  </keywords>
+  <releases>
+    <release version="0.10.5" date="2025-03-08"/>
+  </releases>
+  <url type="homepage">https://mgba.io/</url>
+  <url type="bugtracker">https://github.com/mgba-emu/mgba/issues</url>
+  <url type="faq">https://mgba.io/faq.html</url>
+</component>
