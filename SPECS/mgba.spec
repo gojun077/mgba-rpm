@@ -104,7 +104,8 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/*.xml || :
 %doc %{_datadir}/doc/mGBA/*
 
 %changelog
-* Fri Dec 05 2025 Peter Jun Koh <gopeterjun@naver.com> - 0.10.5
+* Fri Dec 05 2025 Peter Jun Koh <gopeterjun@naver.com> - 0.11.0
 - Initial package for Fedora COPR
 - Built with Qt6 support
 - Supports x86_64 and aarch64 architectures
+- From upstream master branch HEAD e338ea5
