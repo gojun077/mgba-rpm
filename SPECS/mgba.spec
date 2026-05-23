@@ -1,10 +1,11 @@
-Name:           mgba-git
-Version:        0.11.0
-Release:        0.1%{?dist}.git
-Summary:        mGBA Game Boy Advance Emulator - git snapshot
+Name:           mgba
+Version:        0.10.5
+Release:        3%{?dist}
+Summary:        mGBA Game Boy Advance Emulator
 License:        MPL-2.0
 URL:            https://mgba.io
-Source0:        https://github.com/mgba-emu/mgba/archive/master.tar.gz#/mgba-master.tar.gz
+Source0:        https://github.com/mgba-emu/mgba/archive/refs/tags/%{version}.tar.gz#/%{name}-%{version}.tar.gz
+Source1:        io.mgba.metainfo.xml
 
 BuildRequires:  gcc-c++
 BuildRequires:  cmake
@@ -16,19 +17,15 @@ BuildRequires:  appstream
 BuildRequires:  libedit-devel
 BuildRequires:  libepoxy-devel
 BuildRequires:  libzip-devel
-BuildRequires:  qt6-qtbase-devel
-BuildRequires:  qt6-qtbase-private-devel
-BuildRequires:  qt6-qtmultimedia-devel
-BuildRequires:  qt6-qtsvg-devel
-BuildRequires:  qt6-qt5compat
+BuildRequires:  qt5-qtbase-devel
+BuildRequires:  qt5-qtmultimedia-devel
+BuildRequires:  qt5-qtsvg-devel
 BuildRequires:  wayland-devel
 BuildRequires:  pkgconf-pkg-config
-BuildRequires:  ffmpeg-devel
 
 Requires:       hicolor-icon-theme
 
 ExclusiveArch:  x86_64 aarch64
-Provides:       mgba = %{version}-%{release}
 
 %description
 mGBA is an emulator for running Game Boy Advance games. It aims to
@@ -68,17 +65,21 @@ Features:
 - Many, many smaller things.
 
 %prep
-%autosetup -n mgba-master
+%autosetup -n %{name}-%{version}
 
 %build
 %cmake \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_INSTALL_DO_STRIP=OFF \
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    -DBUILD_QT=ON \
+    -DUSE_FFMPEG=OFF \
     -DSKIP_GIT=ON
 %cmake_build
 
 %install
 %cmake_install
+install -Dm0644 %{SOURCE1} %{buildroot}%{_metainfodir}/io.mgba.mGBA.metainfo.xml
 
 # Desktop file validation
 desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
@@ -104,7 +105,17 @@ appstream-util validate-relax --nonet %{buildroot}%{_metainfodir}/*.xml || :
 %doc %{_datadir}/doc/mGBA/*
 
 %changelog
-* Fri Dec 05 2025 Peter Jun Koh <gopeterjun@naver.com> - 0.11.0
+* Sat May 23 2026 Peter Jun Koh <gopeterjun@naver.com> - 0.10.5-3
+- Build the mGBA Qt frontend with Qt5, matching upstream 0.10.5 CMake support
+- Add CMake policy compatibility flag required by Fedora 44 CMake
+
+* Sat May 23 2026 Peter Jun Koh <gopeterjun@naver.com> - 0.10.5-2
+- Disable FFmpeg support because ffmpeg-devel is unavailable in Fedora Copr buildroots
+
+* Sat May 23 2026 Peter Jun Koh <gopeterjun@naver.com> - 0.10.5-1
+- Package upstream release 0.10.5
+
+* Fri Dec 05 2025 Peter Jun Koh <gopeterjun@naver.com> - 0.11.0-0.1.git
 - Initial package for Fedora COPR
 - Built with Qt6 support
 - Supports x86_64 and aarch64 architectures
