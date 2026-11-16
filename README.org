@@ -2,15 +2,148 @@
 #+SUBTITLE: rpmbuild spec file, Makefile for Fedora COPR mgba build
 #+AUTHOR: Peter Jun Koh
 #+EMAIL: gopeterjun@naver.com
-#+DESCRIPTION: mgba build from master branch latest snapshot
+#+DESCRIPTION: rpm packaging for the latest mGBA upstream release on Fedora COPR
 #+KEYWORDS: linux, rhel, rpm, packaging, spec, fedora, copr, mgba
 #+LANGUAGE: en
 
 * Summary
 
 - Created on: [2025-12-05 Fri]
-- Last Updated: [2025-12-05 Fri 20:21]
+- Last Updated: [2026-11-16 Mon 20:55]
+
+[[https://copr.fedorainfracloud.org/coprs/archjun/mgba/package/mgba/][https://copr.fedorainfracloud.org/coprs/archjun/mgba/package/mgba/status_image/last_build.png]]
 
 This repo contains ~rpm~ package related configuration necessary for
 packaging the open-source =mgba= Nintendo Game Boy Advance emulator built
-from C/CPP source.
+from C/CPP source (upstream: https://github.com/mgba-emu/mgba).
+
+The resulting ~rpm~ packages are built by the Fedora COPR build system for
+Fedora user-submitted packages in the following project:
+
+https://copr.fedorainfracloud.org/coprs/archjun/mgba/
+
+COPR currently builds for Fedora 43, 44 and 45 on =aarch64= and =x86_64=.
+
+See ~TROUBLESHOOTING.org~ for COPR authentication notes, token expiration,
+how to add a new Fedora release, and known build failure diagnostics.
+
+* Topics
+
+** How to install mgba from COPR
+
+#+begin_src sh
+  sudo dnf copr enable archjun/mgba
+  sudo dnf install mgba
+#+end_src
+
+The package provides the Qt frontend =mgba-qt=, the SDL frontend =mgba=,
+the =libmgba= shared library and headers, man pages, and a desktop entry.
+
+** How to build mgba rpm package from this repo
+
+First you need to install packages necessary for =rpmbuild=. Assuming you
+are on Fedora:
+
+#+begin_src sh
+  sudo dnf install fedora-packager \
+    fedora-review \
+    mock \
+    rpmdevtools \
+    rpmlint
+#+end_src
+
+Then add your user to the ~mock~ group:
+
+#+begin_src sh
+  sudo usermod -a -G mock $USER
+#+end_src
+
+Finally, install the build dependencies for =mgba= itself. The
+~BuildRequires~ lines in ~SPECS/mgba.spec~ are the source of truth:
+
+#+begin_src sh
+  sudo dnf builddep SPECS/mgba.spec
+#+end_src
+
+Now from the project root, run =make build= which will generate the
+~rpmbuild~ folder structure:
+
+#+begin_src sh :noeval
+  $ tree -d
+  .
+  ├── BUILD
+  ├── BUILDROOT
+  ├── RPMS
+  ├── SOURCES
+  ├── SPECS
+  └── SRPMS
+#+end_src
+
+The =make build= recipe will also read ~SPECS/mgba.spec~ for how to build
+from C/CPP source using =cmake=.
+
+Before downloading sources or building, the Makefile checks GitHub for the
+latest upstream =mgba= release tag and verifies that it matches the RPM
+~Version:~ in ~SPECS/mgba.spec~. To run that check directly:
+
+#+begin_src sh :noeval
+  $ make latest-upstream-tag
+  $ make latest-upstream-version
+  $ make check-upstream-version
+#+end_src
+
+The check prefers =gh release view= and falls back to =curl= against the
+GitHub releases API. If upstream has a newer tag, update the spec
+~Version:~ and ~%changelog~ before creating the COPR SRPM.
+
+To build only the source RPM for COPR upload:
+
+#+begin_src sh :noeval
+  $ make srpm
+#+end_src
+
+Build the SRPM on a host running the Fedora release you are targeting, so
+that it carries the matching dist tag (for example =.fc45=). To test it in
+a clean Fedora buildroot before submitting to COPR:
+
+#+begin_src sh :noeval
+  $ mock -r fedora-45-aarch64 \
+      --resultdir "$PWD/tmp/mock-fedora-45-aarch64" \
+      SRPMS/mgba-<version>-<release>.fc45.src.rpm
+#+end_src
+
+Once the build is complete, the ~.rpm~ build artifacts can be found in
+~RPMS/{aarch64,x86_64}/~ and the source rpm's can be found in ~SRPMS/~.
+Run =make help= to list all Makefile targets.
+
+** Build configuration notes
+
+~SPECS/mgba.spec~ passes these options to =cmake=:
+
+#+begin_src cmake
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_INSTALL_DO_STRIP=OFF \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DBUILD_QT=ON \
+  -DUSE_FFMPEG=OFF \
+  -DSKIP_GIT=ON
+#+end_src
+
+- Debug info is kept (not stripped) so that Fedora generates the
+  =mgba-debuginfo= and =mgba-debugsource= packages.
+- The Qt frontend is built against Qt5, which is what upstream 0.10.5
+  supports.
+- FFmpeg support (video recording) is disabled, because =ffmpeg-devel= comes
+  from RPM Fusion and is not available in Fedora COPR buildroots.
+- =CMAKE_POLICY_VERSION_MINIMUM= is needed by CMake 4 on Fedora 44 and later.
+- =SKIP_GIT= stops the build from querying git for version info, since it
+  builds from a release tarball.
+
+~SOURCES/io.mgba.metainfo.xml~ is AppStream metadata maintained in this
+repo and installed as =io.mgba.mGBA.metainfo.xml=.
+
+** Building RPMs on GitHub Actions
+
+~.github/workflows/build-rpm.yml~ builds the RPMs in a =fedora:latest=
+container when a =v*= tag is pushed (or when run manually), uploads them as
+workflow artifacts and, for tags, attaches them to a GitHub Release.

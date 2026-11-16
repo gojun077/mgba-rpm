@@ -1,0 +1,147 @@
+#+TITLE: mgba-rpm Troubleshooting
+#+AUTHOR: Peter Jun Koh
+#+EMAIL: gopeterjun@naver.com
+#+LANGUAGE: en
+
+* COPR authentication
+
+COPR CLI credentials are stored in =~/.config/copr=. COPR API tokens
+expire; the generated config ends with a =# expiration date:= comment.
+Generate a new token from:
+
+https://copr.fedorainfracloud.org/api/
+
+If =copr-cli= starts failing with authentication or non-JSON API response
+errors, check this file before changing RPM packaging:
+
+#+begin_src sh :noeval
+  grep -i expiration ~/.config/copr
+#+end_src
+
+=copr-cli whoami= does not prove the token works: in =copr-cli= 2.8 it
+prints the =username= field from the config without contacting COPR.
+=copr-cli get= and =list= use public endpoints. To test the token, call the
+protected =auth-check= endpoint through =python3-copr=:
+
+#+begin_src sh :noeval
+  python3 -I -c 'from copr.v3 import Client; print(Client.create_from_config_file().base_proxy.auth_check().name)'
+#+end_src
+
+A valid token prints =archjun=; an invalid or expired one raises
+=CoprRequestException: Login invalid/expired=.
+
+If the Fedora account password was reset, generate and save a fresh COPR API
+token even if the Fedora TOTP method still works in the browser.
+
+* =dnf= 404 after a Fedora release upgrade
+
+When a new Fedora release ships, =dnf= on that release fails for this repo
+until the project has the matching chroots, for example:
+
+#+begin_example
+  Status code: 404 for https://packages.redhat.com/api/pulp-content/public-copr/archjun/mgba/fedora-45-aarch64/repodata/repomd.xml
+#+end_example
+
+The fix is to enable the new chroots and build for them, as below. This
+happened on 2026-11-16 for Fedora 45 (Asahi Remix, aarch64).
+
+* Adding a new Fedora release
+
+Check that the spec matches the latest upstream release, then build the
+SRPM on a host running the new release so it gets the right dist tag:
+
+#+begin_src sh :noeval
+  make check-upstream-version
+  make srpm
+  rpm -qpi SRPMS/mgba-*.fc45.src.rpm
+#+end_src
+
+Test it in a clean buildroot:
+
+#+begin_src sh :noeval
+  mock -r fedora-45-aarch64 \
+    --resultdir "$PWD/tmp/mock-fedora-45-aarch64" \
+    SRPMS/mgba-0.10.5-3.fc45.src.rpm
+#+end_src
+
+Inspect =build.log= and =root.log= in the result directory if it fails.
+
+Check the enabled chroots with =copr-cli get archjun/mgba= and the
+available ones with =copr-cli list-chroots=. =copr-cli modify --chroot=
+replaces the enabled set: COPR's =CoprChrootsLogic.update_from_names=
+documents that "The chroots not present in ``names`` are disabled." Name
+the existing chroots as well as the new ones:
+
+#+begin_src sh :noeval
+  copr-cli modify archjun/mgba \
+    --chroot fedora-43-x86_64 --chroot fedora-43-aarch64 \
+    --chroot fedora-44-x86_64 --chroot fedora-44-aarch64 \
+    --chroot fedora-45-x86_64 --chroot fedora-45-aarch64
+#+end_src
+
+Submit explicitly to the new chroots:
+
+#+begin_src sh :noeval
+  copr-cli build archjun/mgba \
+    -r fedora-45-x86_64 -r fedora-45-aarch64 \
+    SRPMS/mgba-0.10.5-3.fc45.src.rpm
+#+end_src
+
+Check status and logs:
+
+#+begin_src sh :noeval
+  copr-cli status <build-id>
+  copr-cli list-builds archjun/mgba
+  copr-cli download-build --logs <build-id>
+#+end_src
+
+Confirm the repository loads for the new release without root:
+
+#+begin_src sh :noeval
+  dnf repoquery --refresh --repo='copr:copr.fedorainfracloud.org:archjun:mgba' mgba
+#+end_src
+
+* Fedora 45 build record
+
+On 2026-11-16, =make srpm= produced =mgba-0.10.5-3.fc45.src.rpm= without
+spec changes. A local =fedora-45-aarch64= mock rebuild passed (mock 6.9,
+GCC =16.2.1-3.fc45=, Qt =5.15.18-6.fc45=, CMake =4.3.0-7.fc45=) and
+produced the binary, debuginfo and debugsource RPMs. COPR build
+[[https://copr.fedorainfracloud.org/coprs/build/11334706][11334706]] then
+succeeded on =fedora-45-aarch64= and =fedora-45-x86_64=, and
+=sudo dnf --refresh up= on Fedora Asahi Remix 45 upgraded the installed
+=mgba= from =.fc44= to =.fc45=.
+
+=rpmlint= 2.9.0 on the spec and SRPM reports spelling errors (=frontend=,
+=savestate=, =gamepads=), two =description-line-too-long= errors and
+=name-repeated-in-summary=. These come from the description text and do not
+affect the build.
+
+* Earlier build failures (0.10.5, Fedora 44)
+
+- =ffmpeg-devel= is not available in Fedora COPR buildroots (FFmpeg with
+  full codecs comes from RPM Fusion), so the spec builds with
+  =-DUSE_FFMPEG=OFF= (=0.10.5-2=). Video recording to FFmpeg formats is
+  therefore unavailable.
+- Upstream 0.10.5 builds its Qt frontend with Qt5 only; the spec uses the
+  =qt5-*= BuildRequires (=0.10.5-3=).
+- Fedora 44 ships CMake 4, which rejects upstream's
+  =cmake_minimum_required(VERSION 3.1)=; the spec passes
+  =-DCMAKE_POLICY_VERSION_MINIMUM=3.5= (=0.10.5-3=).
+
+* Upstream release drift
+
+The Makefile checks the latest upstream GitHub release tag using =gh=,
+falling back to =curl= and the GitHub releases API.
+
+#+begin_src sh :noeval
+  make latest-upstream-version
+  make check-upstream-version
+#+end_src
+
+If the spec version is stale, update both:
+
+- ~Version:~ (and reset ~Release:~ to 1) in ~SPECS/mgba.spec~
+- the top entry in ~%changelog~
+
+Then rebuild the SRPM with =make srpm=.
